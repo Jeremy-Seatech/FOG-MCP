@@ -1,2 +1,3 @@
 # FOG-MCP
-An MCP server for FOG
+An MCP server Proof of concept for FOG 1.6
+
