@@ -1,4 +1,5 @@
 # FOG-MCP
+An MCP server proof of concept for FOG 1.6
 
 Serveur MCP (stdio) pour piloter un serveur [FOG Project](https://fogproject.org) via son API REST.
 Cible : **FOG 1.6.0-RC-10** (spec OpenAPI 3.0.3 de référence : [`swagger.json`](swagger.json)).
