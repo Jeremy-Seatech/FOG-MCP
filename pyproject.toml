@@ -1,0 +1,27 @@
+[project]
+name = "fog-mcp"
+version = "0.1.0"
+description = "MCP server (stdio) for FOG Project 1.6 REST API"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=2.3.0,<3",
+]
+
+[project.scripts]
+fog-mcp = "fog_mcp.server:main"
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
