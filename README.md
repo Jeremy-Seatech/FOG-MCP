@@ -1,5 +1,4 @@
 # FOG-MCP
-An MCP server proof of concept for FOG 1.6
 
 Serveur MCP (stdio) pour piloter un serveur [FOG Project](https://fogproject.org) via son API REST.
 Cible : **FOG 1.6.0** (version stable, vérifié sur le code source de 1.6.0.14).
