@@ -8,9 +8,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Defaults from FOG's stock taskTypes table: the API spec does not enumerate them.
-# 1 deploy, 2 capture, 8 multicast, 15 deploy-debug, 16 capture-debug,
-# 17 deploy without snapins, 18/19/20 fast/normal/full wipe.
+# The API spec does not enumerate task types. These are FOG 1.6's own
+# TaskType::DEPLOYTASKS + WIPETASKS + CAPTURETASKS (packages/web/src/Items/TaskType.php):
+# 1 deploy, 15 deploy-debug, 17 deploy without snapins, 8 multicast,
+# 18/19/20 fast/normal/full wipe, 2 capture, 16 capture-debug.
 DEFAULT_DESTRUCTIVE_TASK_TYPES = frozenset({1, 2, 8, 15, 16, 17, 18, 19, 20})
 
 _TRUE = {"1", "true", "yes", "on"}

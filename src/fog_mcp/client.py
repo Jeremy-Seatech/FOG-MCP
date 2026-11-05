@@ -32,8 +32,9 @@ SENSITIVE_KEYS = frozenset(
 _STATUS_HINTS = {
     401: "authentication missing or invalid (check FOG_API_TOKEN)",
     403: "authenticated but not permitted",
-    404: "no such object",
-    409: "the resource is not in a cancellable state",
+    404: "no such object or route",
+    405: "method not allowed on this route",
+    409: "conflict with the current state",
 }
 
 

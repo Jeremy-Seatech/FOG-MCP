@@ -32,8 +32,9 @@ async def test_page_always_sends_start_and_length(fog_api):
     [
         (401, None, "401: authentication missing or invalid"),
         (403, None, "403: authenticated but not permitted"),
-        (404, {"error": "Host not found"}, "404: no such object (Host not found)"),
+        (404, {"error": "Host not found"}, "404: no such object or route (Host not found)"),
         (400, {"error": "Unknown filter key: foo"}, "400: Bad Request (Unknown filter key: foo)"),
+        (405, {"error": "Method not allowed"}, "405: method not allowed on this route (Method not allowed)"),
     ],
 )
 async def test_errors(fog_api, status, body, expected):
