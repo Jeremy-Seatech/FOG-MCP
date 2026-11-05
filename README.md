@@ -2,7 +2,10 @@
 An MCP server proof of concept for FOG 1.6
 
 Serveur MCP (stdio) pour piloter un serveur [FOG Project](https://fogproject.org) via son API REST.
-Cible : **FOG 1.6.0-RC-10** (spec OpenAPI 3.0.3 de référence : [`swagger.json`](swagger.json)).
+Cible : **FOG 1.6.0** (version stable, vérifié sur le code source de 1.6.0.14).
+Spec OpenAPI 3.0.3 de référence : [`swagger.json`](swagger.json). Ce fichier est encore celui de 1.6.0-RC-10 ;
+les écarts avec 1.6.0 ont été relevés dans le code source de FOG et sont pris en compte dans le code
+(voir [Mettre à jour la spec](#mettre-à-jour-la-spec) pour le remplacer par l'export d'un serveur 1.6).
 
 - Python ≥ 3.11, géré avec [uv](https://docs.astral.sh/uv/)
 - SDK MCP officiel `mcp` 2.x : `MCPServer` (nouveau nom de `FastMCP` depuis mcp 2.0, même API à décorateurs)
@@ -27,7 +30,7 @@ Cible : **FOG 1.6.0-RC-10** (spec OpenAPI 3.0.3 de référence : [`swagger.json`
 | Outil | Endpoint FOG |
 |---|---|
 | `assign_image(host_id, image_id, confirm)` | `PUT /host/{id}` avec `{"imageID": …}` |
-| `create_task(target, target_id, task_type_id, confirm, shutdown, wol, debug, deploy_snapins, task_name)` | `POST /host/{id}/task` ou `POST /group/{id}/task` |
+| `create_task(target, target_id, task_type_id, confirm, shutdown, wol, debug, deploy_snapins, snapin_abort_on_failure, task_name)` | `POST /host/{id}/task` ou `POST /group/{id}/task` |
 | `cancel_task(task_id \| host_id \| group_id, confirm)` | `DELETE /task/{id}/cancel`, `/host/{id}/cancel` ou `/group/{id}/cancel` |
 
 ### Sécurité
@@ -46,6 +49,11 @@ Cible : **FOG 1.6.0-RC-10** (spec OpenAPI 3.0.3 de référence : [`swagger.json`
     (deploy, capture, multicast, variantes debug, wipes). Elle se change avec `FOG_MCP_DESTRUCTIVE_TASK_TYPES`.
   - En plus, tout type dont le nom contient deploy, wipe, multicast ou capture est traité comme destructif.
 - Un type de tâche inconnu (404) ou incompatible avec la cible (`access` = host/group) est refusé avant tout POST.
+- `wol` vaut `true` par défaut, comme dans FOG quand le champ est omis : la machine est réveillée par Wake-on-LAN.
+- FOG 1.6 ne renvoie pas la tâche créée (corps vide). Pour un hôte, `create_task` relit l'hôte et renvoie sa tâche
+  en attente (`queued_task`) ; pour un groupe, utilise `current_tasks`.
+- Créer une tâche demande les permissions `host.task` (ou `group.task`) **et** `tasktype.<id>` (ou `tasktype.*`)
+  pour l'utilisateur du token ; sinon FOG répond 403 et l'outil indique la permission manquante.
 - Les champs sensibles (`ADPass`, `ADUser`, `productKey`, `token`, `sec_tok`, `pub_key`…) sont retirés de toutes les réponses.
 - Une annulation impossible (409 : tâche déjà terminée) renvoie `status: "not_cancellable"` au lieu d'une erreur brute.
 
@@ -123,6 +131,15 @@ Pour activer l'écriture, ajoute `-e FOG_MCP_ALLOW_WRITE=1`. Le plus simple est 
 > attaché à un utilisateur FOG aux droits limités.
 
 Dans Claude Code, `/mcp` affiche l'état du serveur et ses outils.
+
+## Mettre à jour la spec
+
+FOG génère sa spec à la volée, à partir de ses routes et des plugins installés : il n'en publie pas de fichier.
+`/system/openapi` est accessible sans authentification, donc pour l'exporter depuis ton serveur :
+
+```bash
+curl -fsS --cacert ~/fog-ca.pem https://fog.example.lan/fog/system/openapi | python3 -m json.tool > swagger.json
+```
 
 ## Arborescence
 

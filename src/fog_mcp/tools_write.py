@@ -85,10 +85,15 @@ def register_write_tools(mcp: MCPServer, fog: FogClient) -> None:
         ],
         confirm: Confirm = False,
         shutdown: Annotated[bool, Field(description="Power off when the task finishes")] = False,
-        wol: Annotated[bool, Field(description="Send wake-on-LAN when queuing")] = False,
+        wol: Annotated[
+            bool, Field(description="Send wake-on-LAN when queuing (FOG's own default is on)")
+        ] = True,
         debug: bool = False,
         deploy_snapins: Annotated[
             bool | int | None, Field(description="Deploy all snapins (true) or one snapin ID")
+        ] = None,
+        snapin_abort_on_failure: Annotated[
+            bool | None, Field(description="Stop the remaining snapins when one fails")
         ] = None,
         task_name: str | None = None,
     ) -> dict[str, Any]:
@@ -104,6 +109,8 @@ def register_write_tools(mcp: MCPServer, fog: FogClient) -> None:
         options = {"shutdown": shutdown, "wol": wol, "debug": debug}
         if deploy_snapins is not None:
             options["deploySnapins"] = deploy_snapins
+        if snapin_abort_on_failure is not None:
+            options["snapinAbortOnFailure"] = snapin_abort_on_failure
         summary = {
             "target": target,
             target: tgt,
@@ -130,8 +137,28 @@ def register_write_tools(mcp: MCPServer, fog: FogClient) -> None:
         body: dict[str, Any] = {"taskTypeID": task_type_id, **options}
         if task_name:
             body["taskName"] = task_name
-        result = await fog.request("POST", f"{target}/{target_id}/task", json=body)
-        return {"status": "done", "action": "create_task", "summary": summary, "result": sanitize(result)}
+        try:
+            # FOG 1.6 answers 200 with a placeholder body ("" or []), not the task.
+            await fog.request("POST", f"{target}/{target_id}/task", json=body)
+        except FogError as exc:
+            if exc.status == 403:
+                raise FogError(
+                    403,
+                    f"not permitted: the API user needs {target}.task and "
+                    f"tasktype.{task_type_id} (or tasktype.*) permissions",
+                ) from exc
+            raise
+        out = {"status": "done", "action": "create_task", "summary": summary}
+        if target == "host":
+            # The task exists by now: a failed re-read must not report the call as failed.
+            try:
+                out["queued_task"] = (await host_summary(fog, target_id)).get("task")
+            except FogError as exc:
+                out["queued_task"] = None
+                out["note"] = f"task queued, but re-reading the host failed: {exc}"
+        else:
+            out["next_step"] = "Use current_tasks to follow the queued tasks."
+        return out
 
     @mcp.tool(annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=True))
     async def cancel_task(
@@ -160,9 +187,10 @@ def register_write_tools(mcp: MCPServer, fog: FogClient) -> None:
             return _needs_confirmation("cancel_task", summary, [])
 
         try:
-            result = await fog.request("DELETE", f"{kind}/{obj_id}/cancel")
+            # FOG 1.6 answers 200 with a placeholder body; nothing to read.
+            await fog.request("DELETE", f"{kind}/{obj_id}/cancel")
         except FogError as exc:
             if exc.status == 409:
                 return {"status": "not_cancellable", "action": "cancel_task", "summary": summary, "message": str(exc)}
             raise
-        return {"status": "done", "action": "cancel_task", "summary": summary, "result": sanitize(result)}
+        return {"status": "done", "action": "cancel_task", "summary": summary}

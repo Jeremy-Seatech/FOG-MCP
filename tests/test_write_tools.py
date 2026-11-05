@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from .conftest import call, envelope
@@ -62,14 +63,46 @@ async def test_deploy_host_preview(fog_api, rw_server):
 
 
 async def test_deploy_host_confirmed(fog_api, rw_server):
-    mock_host(fog_api)
+    fog_api.get("/host/7").mock(
+        side_effect=[
+            httpx.Response(200, json=HOST),
+            httpx.Response(200, json={**HOST, "task": {"id": 51, "name": "Deploy Task"}}),
+        ]
+    )
     fog_api.get("/tasktype/1").respond(json=DEPLOY)
-    post = fog_api.post("/host/7/task").respond(json=envelope([{"id": 51, "typeID": 1, "hostID": 7}]))
+    # FOG 1.6 answers a queued task with a placeholder body, not the task.
+    post = fog_api.post("/host/7/task").respond(json="")
     err, out = await call(
         rw_server, "create_task", {"target": "host", "target_id": 7, "task_type_id": 1, "shutdown": True, "confirm": True}
     )
     assert not err and out["status"] == "done"
-    assert json.loads(post.calls.last.request.content) == {"taskTypeID": 1, "shutdown": True, "wol": False, "debug": False}
+    # wol defaults to on, like FOG itself when the field is left out.
+    assert json.loads(post.calls.last.request.content) == {"taskTypeID": 1, "shutdown": True, "wol": True, "debug": False}
+    assert out["queued_task"] == {"id": 51, "name": "Deploy Task"}
+
+
+async def test_task_options_passed_through(fog_api, rw_server):
+    mock_host(fog_api)
+    fog_api.get("/tasktype/12").respond(json={"id": 12, "name": "All Snapins", "access": "both"})
+    post = fog_api.post("/host/7/task").respond(json=[])
+    await call(
+        rw_server,
+        "create_task",
+        {
+            "target": "host", "target_id": 7, "task_type_id": 12, "wol": False,
+            "deploy_snapins": True, "snapin_abort_on_failure": True, "confirm": True,
+        },
+    )
+    body = json.loads(post.calls.last.request.content)
+    assert body["wol"] is False and body["deploySnapins"] is True and body["snapinAbortOnFailure"] is True
+
+
+async def test_task_type_permission_denied(fog_api, rw_server):
+    mock_host(fog_api)
+    fog_api.get("/tasktype/1").respond(json=DEPLOY)
+    fog_api.post("/host/7/task").respond(403, json={"error": "Forbidden"})
+    err, out = await call(rw_server, "create_task", {"target": "host", "target_id": 7, "task_type_id": 1, "confirm": True})
+    assert err and "tasktype.1" in out
 
 
 async def test_wakeup_still_needs_confirm(fog_api, rw_server):
@@ -100,6 +133,7 @@ async def test_group_deploy_lists_hosts(fog_api, rw_server):
 
     err, out = await call(rw_server, "create_task", {"target": "group", "target_id": 2, "task_type_id": 1, "confirm": True})
     assert out["status"] == "done" and post.call_count == 1
+    assert "current_tasks" in out["next_step"]
 
 
 async def test_unknown_task_type(fog_api, rw_server):
@@ -125,11 +159,18 @@ async def test_cancel_requires_exactly_one_id(rw_server):
 
 async def test_cancel_preview_then_confirm(fog_api, rw_server):
     fog_api.get("/task/50").respond(json={"id": 50, "hostID": 7, "typeID": 1, "state": {"id": 2, "name": "In-Progress"}})
-    delete = fog_api.delete("/task/50/cancel").respond(json={"msg": "Task canceled"})
+    delete = fog_api.delete("/task/50/cancel").respond(json="")
     err, out = await call(rw_server, "cancel_task", {"task_id": 50})
     assert out["status"] == "confirmation_required" and not delete.called
     err, out = await call(rw_server, "cancel_task", {"task_id": 50, "confirm": True})
     assert not err and out["status"] == "done" and delete.called
+
+
+async def test_cancel_unknown_task_is_404(fog_api, rw_server):
+    fog_api.get("/task/999").respond(404, json={"error": "No such object"})
+    delete = fog_api.delete("/task/999/cancel")
+    err, out = await call(rw_server, "cancel_task", {"task_id": 999, "confirm": True})
+    assert err and "404" in out and not delete.called
 
 
 @pytest.mark.parametrize(("kind", "path"), [("host_id", "/host/7/cancel")])
