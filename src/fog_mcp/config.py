@@ -93,5 +93,12 @@ class Settings:
     def ssl_verify(self) -> ssl.SSLContext | bool:
         """Value for httpx's ``verify``: a CA bundle wins over FOG_VERIFY_TLS=0."""
         if self.ca_bundle is not None:
-            return ssl.create_default_context(cafile=str(self.ca_bundle))
+            ctx = ssl.create_default_context(cafile=str(self.ca_bundle))
+            # Python 3.13 turns on VERIFY_X509_STRICT by default, which rejects a CA
+            # without a Key Usage extension. FOG 1.5 created its root CA with a bare
+            # `openssl req -x509` (distro openssl.cnf, no keyUsage), and FOG 1.6 keeps
+            # that root byte for byte on upgrade, so strict mode fails on upgraded
+            # servers. The chain, hostname/IP and expiry are still fully verified.
+            ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+            return ctx
         return self.verify_tls

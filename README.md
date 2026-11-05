@@ -78,11 +78,16 @@ openssl s_client -connect fog.example.lan:443 -showcerts </dev/null 2>/dev/null 
 
 > Si FOG utilise sa propre CA (`/opt/fog/snapins/ssl/CA/.fogCA.pem`), c'est ce fichier-là qu'il faut fournir.
 
+> **Serveur mis à jour depuis FOG 1.5** : la 1.6 garde la CA racine créée par l'installeur 1.5, qui n'a pas
+> d'extension Key Usage. Python 3.13 refuse par défaut ce type de CA (`CA cert does not include key usage extension`).
+> fog-mcp désactive donc ce seul contrôle strict quand `FOG_CA_BUNDLE` est défini ; la chaîne, l'IP ou le nom
+> et les dates restent vérifiés (voir `tests/test_tls.py`).
+
 ## Installation et tests
 
 ```bash
 uv sync
-uv run pytest            # 41 tests, toutes les réponses HTTP sont simulées avec respx
+uv run pytest            # 49 tests, toutes les réponses HTTP sont simulées avec respx
 ```
 
 Lancement manuel (stdio ; les logs vont sur stderr) :
